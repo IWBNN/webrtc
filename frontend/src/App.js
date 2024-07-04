@@ -5,6 +5,7 @@ import './App.css';
 
 const App = () => {
   const localStreamRef = useRef(null);
+  const remoteStreamRef = useRef(new MediaStream());
   const audioRef = useRef(null);
   let peerConnection = useRef(null);
   let stompClient = useRef(null);
@@ -19,7 +20,8 @@ const App = () => {
         stream.getTracks().forEach(track => peerConnection.current.addTrack(track, stream));
 
         peerConnection.current.ontrack = (event) => {
-          audioRef.current.srcObject = event.streams[0];
+          remoteStreamRef.current.addTrack(event.track);
+          audioRef.current.srcObject = remoteStreamRef.current;
         };
 
         const offer = await peerConnection.current.createOffer();
@@ -34,7 +36,7 @@ const App = () => {
     };
 
     const connectToWebSocket = (offer) => {
-      const socket = new SockJS('https://43.201.252.160/ws');
+      const socket = new SockJS('https://43.202.49.14/ws');
       stompClient.current = new Client({
         webSocketFactory: () => socket,
         debug: (str) => {
@@ -54,7 +56,7 @@ const App = () => {
           stompClient.current.publish({ destination: '/app/offer', body: JSON.stringify(offer) });
         },
         onDisconnect: () => {
-          console.log("Connection closed to https://43.201.252.160/ws");
+          console.log("Connection closed to https://43.202.49.14/ws");
         }
       });
 
