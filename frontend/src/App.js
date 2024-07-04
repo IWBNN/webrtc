@@ -33,18 +33,18 @@ const App = () => {
     };
 
     const connectToWebSocket = (offer) => {
-      const socket = new SockJS('http://43.201.255.235/ws'); // EC2 퍼블릭 IP 주소로 변경
+      const socket = new SockJS('http://43.201.252.160:8080/ws'); // EC2 퍼블릭 IP 주소로 변경
       stompClient.current = Stomp.over(socket);
 
       stompClient.current.connect({}, () => {
-        stompClient.current.subscribe('/topic/offer', (message) => {
+        stompClient.current.subscribe('/topic/offer', async (message) => {
           const remoteOffer = JSON.parse(message.body);
-          handleOffer(remoteOffer);
+          await handleOffer(remoteOffer);
         });
 
-        stompClient.current.subscribe('/topic/answer', (message) => {
+        stompClient.current.subscribe('/topic/answer', async (message) => {
           const remoteAnswer = JSON.parse(message.body);
-          handleAnswer(remoteAnswer);
+          await handleAnswer(remoteAnswer);
         });
 
         stompClient.current.send('/app/offer', {}, JSON.stringify(offer));
