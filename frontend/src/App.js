@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
-import { over } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
+import Stomp from 'stompjs';
 import './App.css';
 
 const App = () => {
@@ -33,8 +33,8 @@ const App = () => {
     };
 
     const connectToWebSocket = (offer) => {
-      const socket = new SockJS('http://your-ec2-instance-address/ws');
-      stompClient.current = over(socket);
+      const socket = new SockJS('http://43.201.255.235/ws'); // EC2 퍼블릭 IP 주소로 변경
+      stompClient.current = Stomp.over(socket);
 
       stompClient.current.connect({}, () => {
         stompClient.current.subscribe('/topic/offer', (message) => {
