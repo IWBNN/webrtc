@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import SockJS from 'sockjs-client';
-import Stomp from 'stompjs';
+import { Client } from '@stomp/stompjs';
 import './App.css';
 
 const App = () => {
@@ -29,26 +29,36 @@ const App = () => {
 
       } catch (error) {
         console.error('Error accessing media devices:', error);
+        alert('Microphone access denied or not available.');
       }
     };
 
     const connectToWebSocket = (offer) => {
-      const socket = new SockJS('http://43.201.252.160:8080/ws'); // EC2 퍼블릭 IP 주소로 변경
-      stompClient.current = Stomp.over(socket);
+      const socket = new SockJS('https://43.201.252.160/ws');
+      stompClient.current = new Client({
+        webSocketFactory: () => socket,
+        debug: (str) => {
+          console.log(str);
+        },
+        onConnect: () => {
+          stompClient.current.subscribe('/topic/offer', (message) => {
+            const remoteOffer = JSON.parse(message.body);
+            handleOffer(remoteOffer);
+          });
 
-      stompClient.current.connect({}, () => {
-        stompClient.current.subscribe('/topic/offer', async (message) => {
-          const remoteOffer = JSON.parse(message.body);
-          await handleOffer(remoteOffer);
-        });
+          stompClient.current.subscribe('/topic/answer', (message) => {
+            const remoteAnswer = JSON.parse(message.body);
+            handleAnswer(remoteAnswer);
+          });
 
-        stompClient.current.subscribe('/topic/answer', async (message) => {
-          const remoteAnswer = JSON.parse(message.body);
-          await handleAnswer(remoteAnswer);
-        });
-
-        stompClient.current.send('/app/offer', {}, JSON.stringify(offer));
+          stompClient.current.publish({ destination: '/app/offer', body: JSON.stringify(offer) });
+        },
+        onDisconnect: () => {
+          console.log("Connection closed to https://43.201.252.160/ws");
+        }
       });
+
+      stompClient.current.activate();
     };
 
     const handleOffer = async (remoteOffer) => {
@@ -58,7 +68,7 @@ const App = () => {
       const answer = await peerConnection.current.createAnswer();
       await peerConnection.current.setLocalDescription(answer);
 
-      stompClient.current.send('/app/answer', {}, JSON.stringify(answer));
+      stompClient.current.publish({ destination: '/app/answer', body: JSON.stringify(answer) });
     };
 
     const handleAnswer = async (remoteAnswer) => {
@@ -77,7 +87,7 @@ const App = () => {
         localStreamRef.current.getTracks().forEach(track => track.stop());
       }
       if (stompClient.current) {
-        stompClient.current.disconnect();
+        stompClient.current.deactivate();
       }
     };
   }, []);
