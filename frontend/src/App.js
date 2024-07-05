@@ -36,7 +36,7 @@ const App = () => {
     };
 
     const connectToWebSocket = (offer) => {
-      const socket = new SockJS('https://43.202.49.14/ws');
+      const socket = new SockJS('https://43.203.222.208/ws');
       stompClient.current = new Client({
         webSocketFactory: () => socket,
         debug: (str) => {
@@ -56,7 +56,7 @@ const App = () => {
           stompClient.current.publish({ destination: '/app/offer', body: JSON.stringify(offer) });
         },
         onDisconnect: () => {
-          console.log("Connection closed to https://43.202.49.14/ws");
+          console.log("Connection closed to https://43.203.222.208/ws");
         }
       });
 
