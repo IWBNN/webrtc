@@ -8,23 +8,23 @@ import org.springframework.stereotype.Controller;
 import ac.su.webrtc.Message;
 
 @Controller
-public class SignalingController {
+public class WebSocketController {
 
     @MessageMapping("/offer")
     @SendTo("/topic/offer")
-    public Message processOffer(Message offer) {
-        return offer;
+    public Message sendOffer(Message message) {
+        return message;
     }
 
     @MessageMapping("/answer")
     @SendTo("/topic/answer")
-    public Message processAnswer(Message answer) {
-        return answer;
+    public Message sendAnswer(Message message) {
+        return message;
     }
 
     @MessageMapping("/candidate")
     @SendTo("/topic/candidate")
-    public Message processCandidate(Message candidate) {
-        return candidate;
+    public Message sendCandidate(Message message) {
+        return message;
     }
 }

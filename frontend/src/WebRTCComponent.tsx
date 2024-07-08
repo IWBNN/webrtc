@@ -1,47 +1,45 @@
 import React, { useEffect, useRef, useState } from 'react';
 import SockJS from 'sockjs-client';
-import { Client as StompClient, IMessage } from '@stomp/stompjs';
+import { Stomp } from '@stomp/stompjs';
 
 const WebRTCComponent: React.FC = () => {
     const localVideoRef = useRef<HTMLVideoElement>(null);
     const remoteVideoRef = useRef<HTMLVideoElement>(null);
     const localStreamRef = useRef<MediaStream | null>(null);
     const pcRef = useRef<RTCPeerConnection | null>(null);
-    const stompClientRef = useRef<StompClient | null>(null);
+    const stompClientRef = useRef<any>(null);
+
     const [connected, setConnected] = useState(false);
 
     useEffect(() => {
-        const socket = new SockJS('http://43.200.253.198:8080/ws');
-        const stompClient = new StompClient({
-            webSocketFactory: () => socket as any,
-            debug: (str) => console.log(str),
-        });
+        const socket = new SockJS('https://54.180.160.104/ws');
+        const stompClient = Stomp.over(socket);
         stompClientRef.current = stompClient;
 
-        stompClient.onConnect = (frame) => {
+        stompClient.connect({}, (frame: any) => {
             console.log('Connected: ' + frame);
             setConnected(true);
-            stompClient.subscribe('/topic/messages', (message: IMessage) => {
+
+            stompClient.subscribe('/topic/offer', (message: any) => {
                 const data = JSON.parse(message.body);
-                if (data.type === 'offer') {
-                    handleOffer(data.offer);
-                } else if (data.type === 'answer') {
-                    handleAnswer(data.answer);
-                } else if (data.type === 'candidate') {
-                    handleCandidate(data.candidate);
-                }
+                handleOffer(data.offer, data.sender);
             });
-        };
 
-        stompClient.onStompError = (frame) => {
-            console.error('Broker reported error: ' + frame.headers['message']);
-            console.error('Additional details: ' + frame.body);
-        };
+            stompClient.subscribe('/topic/answer', (message: any) => {
+                const data = JSON.parse(message.body);
+                handleAnswer(data.answer, data.sender);
+            });
 
-        stompClient.activate();
+            stompClient.subscribe('/topic/candidate', (message: any) => {
+                const data = JSON.parse(message.body);
+                handleCandidate(data.candidate, data.sender);
+            });
+        }, (error: any) => {
+            console.error('Error: ' + error);
+        });
 
         return () => {
-            stompClient.deactivate();
+            stompClient.disconnect();
         };
     }, []);
 
@@ -57,30 +55,25 @@ const WebRTCComponent: React.FC = () => {
         }
     };
 
-    const createPeerConnection = () => {
+    const createPeerConnection = (peerId: string) => {
         const pc = new RTCPeerConnection({
-            iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' }
-            ]
+            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
         });
 
-        pc.onicecandidate = event => {
+        pc.onicecandidate = (event) => {
             if (event.candidate) {
-                stompClientRef.current?.publish({
-                    destination: '/app/candidate',
-                    body: JSON.stringify({ candidate: event.candidate })
-                });
+                stompClientRef.current.send('/app/candidate', {}, JSON.stringify({ candidate: event.candidate, sender: peerId }));
             }
         };
 
-        pc.ontrack = event => {
+        pc.ontrack = (event) => {
             if (remoteVideoRef.current) {
                 remoteVideoRef.current.srcObject = event.streams[0];
             }
         };
 
         if (localStreamRef.current) {
-            localStreamRef.current.getTracks().forEach(track => {
+            localStreamRef.current.getTracks().forEach((track) => {
                 pc.addTrack(track, localStreamRef.current!);
             });
         }
@@ -88,22 +81,28 @@ const WebRTCComponent: React.FC = () => {
         pcRef.current = pc;
     };
 
-    const handleOffer = async (offer: RTCSessionDescriptionInit) => {
-        if (!pcRef.current) createPeerConnection();
-        await pcRef.current!.setRemoteDescription(new RTCSessionDescription(offer));
-        const answer = await pcRef.current!.createAnswer();
-        await pcRef.current!.setLocalDescription(answer);
-        stompClientRef.current?.publish({
-            destination: '/app/answer',
-            body: JSON.stringify({ answer: answer })
-        });
+    const handleOffer = async (offer: RTCSessionDescriptionInit, sender: string) => {
+        if (!pcRef.current) createPeerConnection(sender);
+        try {
+            await pcRef.current!.setRemoteDescription(new RTCSessionDescription(offer));
+            const answer = await pcRef.current!.createAnswer();
+            await pcRef.current!.setLocalDescription(answer);
+            stompClientRef.current.send('/app/answer', {}, JSON.stringify({ answer: answer, sender: sender }));
+        } catch (error) {
+            console.error('Error handling offer:', error);
+        }
     };
 
-    const handleAnswer = async (answer: RTCSessionDescriptionInit) => {
-        await pcRef.current!.setRemoteDescription(new RTCSessionDescription(answer));
+    const handleAnswer = async (answer: RTCSessionDescriptionInit, sender: string) => {
+        if (!pcRef.current) return;
+        try {
+            await pcRef.current!.setRemoteDescription(new RTCSessionDescription(answer));
+        } catch (error) {
+            console.error('Error handling answer:', error);
+        }
     };
 
-    const handleCandidate = async (candidate: RTCIceCandidateInit) => {
+    const handleCandidate = async (candidate: RTCIceCandidateInit, sender: string) => {
         try {
             await pcRef.current!.addIceCandidate(new RTCIceCandidate(candidate));
         } catch (error) {
@@ -111,14 +110,15 @@ const WebRTCComponent: React.FC = () => {
         }
     };
 
-    const createOffer = async () => {
-        if (!pcRef.current) createPeerConnection();
-        const offer = await pcRef.current!.createOffer();
-        await pcRef.current!.setLocalDescription(offer);
-        stompClientRef.current?.publish({
-            destination: '/app/offer',
-            body: JSON.stringify({ offer: offer })
-        });
+    const createOffer = async (peerId: string) => {
+        if (!pcRef.current) createPeerConnection(peerId);
+        try {
+            const offer = await pcRef.current!.createOffer();
+            await pcRef.current!.setLocalDescription(offer);
+            stompClientRef.current.send('/app/offer', {}, JSON.stringify({ offer: offer, sender: peerId }));
+        } catch (error) {
+            console.error('Error creating offer:', error);
+        }
     };
 
     return (
@@ -126,7 +126,7 @@ const WebRTCComponent: React.FC = () => {
             <video ref={localVideoRef} autoPlay playsInline muted />
             <video ref={remoteVideoRef} autoPlay playsInline />
             <button onClick={startLocalStream}>Start Local Stream</button>
-            <button onClick={createOffer} disabled={!connected}>Call</button>
+            <button onClick={() => createOffer('peer1')} disabled={!connected}>Call Peer 1</button>
         </div>
     );
 };
