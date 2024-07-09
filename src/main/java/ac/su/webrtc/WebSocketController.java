@@ -4,9 +4,6 @@ import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.SendTo;
 import org.springframework.stereotype.Controller;
 
-// Message 클래스를 임포트
-import ac.su.webrtc.Message;
-
 @Controller
 public class WebSocketController {
 
